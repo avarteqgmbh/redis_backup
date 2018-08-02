@@ -13,6 +13,7 @@ import sys
 import os
 import shutil
 import hashlib
+import logging
 
 __author__ = 'Luke.The.Coder'
 
@@ -84,6 +85,8 @@ def copy_data_file(data_file, backup_dir, backup_filename, port, file_type):
     Returns backup file path when the copy was success and passed the checksum
     check. otherwise, return None
     """
+    logger = logging.getLogger("main")
+
     df_mtime = os.path.getmtime(data_file)
     df_mtime = datetime.fromtimestamp(df_mtime).strftime(backup_filename)
     backup_filename = '%s(port_%d).%s' % (df_mtime, port, file_type)
@@ -92,20 +95,20 @@ def copy_data_file(data_file, backup_dir, backup_filename, port, file_type):
     if not os.path.exists(backup_dir):
         os.makedirs(backup_dir)
     elif not os.path.isdir(backup_dir):
-        sys.stderr.write('backupdir: %s is not a directory.\n' % backup_dir)
+        logger.fatal('backupdir: %s is not a directory.\n' % backup_dir)
         return None
     elif os.path.exists(backup_path):
-        sys.stderr.write('backupfile: %s already exists.\n' % backup_path)
+        logger.fatal('backupfile: %s already exists.\n' % backup_path)
         return None
 
     shutil.copy2(data_file, backup_path)
 
     if not checksum_compare(data_file, backup_path):
-        sys.stderr.write('failed to copy dbfile %s, checksum compare failed.'
+        logger.fatal('failed to copy dbfile %s, checksum compare failed.'
                          % data_file)
         return None
-    print 'backup', backup_path, 'created.', \
-        os.path.getsize(backup_path), 'bytes, checksum ok!'
+    logger.info('backup %s created. %s bytes, checksum ok!' \
+                % (backup_path, os.path.getsize(backup_path)))
     return backup_path
 
 
@@ -135,14 +138,16 @@ def clean_backup_dir(backup_dir, max_backups, port, file_type):
     """
     Removes oldest backups if the total number of backups exceeds max_backups
     """
+    logger = logging.getLogger("main")
+
     file_suffix = '(port_%d).%s' % (port, file_type)
     files = [f for f in os.listdir(backup_dir) if f.endswith(file_suffix)]
     n_files = len(files)
     if n_files <= max_backups:
         return
 
-    print 'number of backups(%d) exceeds limit(%d), deleting old backups.'\
-        % (n_files, max_backups)
+    logger.info('number of backups(%d) exceeds limit(%d), deleting old backups.'\
+        % (n_files, max_backups))
 
     files_time = []
     for filename in files:
@@ -152,7 +157,7 @@ def clean_backup_dir(backup_dir, max_backups, port, file_type):
     files_time.sort(key=lambda x: x[1])
 
     for fp in files_time[:n_files - max_backups]:
-        print 'delete', fp[0]
+        logger.info('delete %s' % fp[0])
         os.remove(fp[0])
 
     files = [f for f in os.listdir(backup_dir) if f.endswith(file_suffix)]
@@ -184,10 +189,17 @@ def main():
 
     # Setup command line arguments
     parser = argparse.ArgumentParser()
+    parser.add_argument('-log_file', type=str, dest='log_file',
+                        help='Path to log file', required=True)
+    parser.add_argument('-log_level', type=str, dest='log_level',
+                        help='Log level as defined in logging module',
+                        default='INFO')
     parser.add_argument('-backup_dir', type=str, dest='backup_dir',
                         help='backup directory', default='./backups')
     parser.add_argument('-backup_filename', type=str, dest='backup_filename',
                         help='', default='redis_dump_%Y-%m-%d_%H%M%S')
+    parser.add_argument('-redis_host', type=int, dest='redis_host',
+                        help='redis host (name or IP address)', default='localhost')
     parser.add_argument('-redis_port', type=int, dest='redis_port',
                         help='redis port', default=6379)
     parser.add_argument('-max_backups', type=int, dest='max_backups',
@@ -195,7 +207,7 @@ def main():
     parser.add_argument('-bgsave_timeout', type=int, dest='bgsave_timeout',
                         help='bgsave timeout in seconds', default=60)
     parser.add_argument('-with_aof', dest="with_aof", help='enable backup aof',
-                        action="store_true")
+                        action="store_false")
     parser.add_argument('-aof_filename', dest="aof_filename",
                         default='appendonly.aof', help='aof filename')
 
@@ -209,60 +221,73 @@ def main():
     backup_dir = args.backup_dir
     backup_filename = args.backup_filename
     max_backups = args.max_backups
+    redis_host = args.redis_host
     redis_port = args.redis_port
     bgsave_timeout = args.bgsave_timeout
     with_aof = args.with_aof
     aof_filename = args.aof_filename
 
-    print 'backup begin @', st
-    print 'backup dir:    \t', backup_dir
-    print 'backup file:   \t', backup_filename
-    print 'max backups:   \t', max_backups
-    print 'redis port:    \t', redis_port
-    print 'bgsave timeout:\t', bgsave_timeout, 'seconds'
+    logger = logging.getLogger("main")
+    logger.setLevel(args.log_level)
+
+    # create the logging file handler
+    fh = logging.FileHandler(args.log_file, mode='w')
+    fh.setLevel(args.log_level)
+
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+    fh.setFormatter(formatter)
+    logger.addHandler(fh)
+
+    logger.info('backup begin @ %s' % st)
+    logger.info('backup dir: %s' % backup_dir)
+    logger.info('backup file: %s' % backup_filename)
+    logger.info('max backups: %s' % max_backups)
+    logger.info('redis host: %s' % redis_host)
+    logger.info('redis port: %s' % redis_port)
+    logger.info('bgsave timeout: %s seconds' % bgsave_timeout)
 
     # Connect to local redis server
-    r = redis.StrictRedis(port=args.redis_port)
-    print 'connected to redis server localhost:%d' % args.redis_port
+    r = redis.StrictRedis(host=redis_host, port=redis_port)
+    logger.info('connected to redis server %s:%d' % (redis_host, redis_port))
 
     # Get where redis saves the RDB file
     rdb = rdb_path(r)
-    print 'redis rdb file path:', rdb
+    logger.info('redis rdb file path: %s' % rdb)
 
     if with_aof:
         aof = aof_path(r, aof_filename)
-        print 'redis aof file path:', aof
+        logger.info('redis aof file path: %s' % aof)
 
     # Start bgsave and wait for it to finish
-    print 'redis bgsave...',
+    logger.info('redis bgsave...')
     sys.stdout.flush()
     ret = bgsave_and_wait(r, timeout=timedelta(seconds=args.bgsave_timeout))
-    print ret
+    logger.info(ret)
 
     if ret != 'ok':
-        sys.stderr.write('%s %s\n' % ('backup failed!', datetime.now() - st))
+        logger.fatal('%s %s\n' % ('backup failed!', datetime.now() - st))
         sys.exit(1)
 
-    print 'stating copy rdb...'
+    logger.info('starting copy rdb...')
     rdb_bak_path = copy_rdb(rdb, backup_dir, backup_filename, redis_port)
     if not rdb_bak_path:
-        sys.stderr.write('%s %s\n' % ('backup failed!', datetime.now() - st))
+        logger.fatal('%s %s\n' % ('backup failed!', datetime.now() - st))
         sys.exit(1)
 
     if with_aof:
-        print 'stating copy aof...'
+        logger.info('starting copy aof...')
         aof_bak_path = copy_aof(aof, backup_dir, backup_filename, redis_port)
         if not aof_bak_path:
             os.remove(rdb_bak_path)
-            sys.stderr.write('remove %s\n' % (rdb_bak_path))
-            sys.stderr.write('%s %s\n' % ('backup failed!', datetime.now()-st))
+            logger.fatal('remove %s\n' % (rdb_bak_path))
+            logger.fatal('%s %s\n' % ('backup failed!', datetime.now()-st))
             sys.exit(1)
 
     clean_rdb_backup(backup_dir, max_backups, redis_port)
     if with_aof:
         clean_aof_backup(backup_dir, max_backups, redis_port)
 
-    print 'backup successful! time cost:', datetime.now() - st
+    logger.info('backup successful! time cost: %s' % datetime.now() - st)
 
 if __name__ == '__main__':
     main()
