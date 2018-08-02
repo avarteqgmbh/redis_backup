@@ -198,7 +198,7 @@ def main():
                         help='backup directory', default='./backups')
     parser.add_argument('-backup_filename', type=str, dest='backup_filename',
                         help='', default='redis_dump_%Y-%m-%d_%H%M%S')
-    parser.add_argument('-redis_host', type=int, dest='redis_host',
+    parser.add_argument('-redis_host', type=str, dest='redis_host',
                         help='redis host (name or IP address)', default='localhost')
     parser.add_argument('-redis_port', type=int, dest='redis_port',
                         help='redis port', default=6379)
@@ -207,7 +207,7 @@ def main():
     parser.add_argument('-bgsave_timeout', type=int, dest='bgsave_timeout',
                         help='bgsave timeout in seconds', default=60)
     parser.add_argument('-with_aof', dest="with_aof", help='enable backup aof',
-                        action="store_false")
+                        action="store_true", default=False)
     parser.add_argument('-aof_filename', dest="aof_filename",
                         default='appendonly.aof', help='aof filename')
 
@@ -287,7 +287,7 @@ def main():
     if with_aof:
         clean_aof_backup(backup_dir, max_backups, redis_port)
 
-    logger.info('backup successful! time cost: %s' % datetime.now() - st)
+    logger.info('backup successful! time cost: %s seconds' % (datetime.now() - st).seconds)
 
 if __name__ == '__main__':
     main()
