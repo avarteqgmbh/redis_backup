@@ -80,7 +80,7 @@ def copy_data_file(data_file, backup_dir, backup_filename, port, file_type):
     when finished.
 
     The final backup name is:
-    data_file_mtime.strftime(backup_filename) + "(port_%d)" % port
+    data_file_mtime.strftime(backup_filename)
 
     Returns backup file path when the copy was success and passed the checksum
     check. otherwise, return None
@@ -89,7 +89,7 @@ def copy_data_file(data_file, backup_dir, backup_filename, port, file_type):
 
     df_mtime = os.path.getmtime(data_file)
     df_mtime = datetime.fromtimestamp(df_mtime).strftime(backup_filename)
-    backup_filename = '%s(port_%d).%s' % (df_mtime, port, file_type)
+    backup_filename = '%s.%s' % (df_mtime, file_type)
     backup_path = os.path.join(backup_dir, backup_filename)
 
     if not os.path.exists(backup_dir):
