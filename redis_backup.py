@@ -38,7 +38,7 @@ def checksum_compare(src, dst):
 
 
 def bgsave_and_wait(r, timeout=timedelta(seconds=60)):
-    assert (isinstance(r, redis.StrictRedis))
+    assert (isinstance(r, redis.Redis))
 
     bgsave_begin = datetime.now()
 
@@ -59,7 +59,7 @@ def rdb_path(r):
     """
     Get&return redis config `dbfilename`
     """
-    assert (isinstance(r, redis.StrictRedis))
+    assert (isinstance(r, redis.Redis))
     d = r.config_get('dir')
     dbfilename = r.config_get('dbfilename')
     return '%s/%s' % (d['dir'], dbfilename['dbfilename'])
@@ -69,7 +69,7 @@ def aof_path(r, aof_filename):
     """
     Get&return redis config `appendfilename`
     """
-    assert (isinstance(r, redis.StrictRedis))
+    assert (isinstance(r, redis.Redis))
     d = r.config_get('dir')
     return os.path.join(d['dir'], aof_filename)
 
@@ -247,7 +247,7 @@ def main():
     logger.info('bgsave timeout: %s seconds' % bgsave_timeout)
 
     # Connect to local redis server
-    r = redis.StrictRedis(host=redis_host, port=redis_port)
+    r = redis.Redis(host=redis_host, port=redis_port)
     logger.info('connected to redis server %s:%d' % (redis_host, redis_port))
 
     # Get where redis saves the RDB file
